@@ -1,0 +1,143 @@
+Political Donations Analysis
+
+```{r}
+owner_contributions <- read_csv('sports-political-donations.csv')
+```
+
+So since already going through data set once with Python I know the Amount field is a string data type while it needs be numeric in order to do mathematic operations with the values. So lets change that first seems like dplyr as built in function that helps with that
+
+```{r}
+
+#looks like same problem as with Python when trying to change data type without getting rid of the special characters ($ and ,). Need to address that first
+
+owner_contributions$Amount <- gsub('[$,]', '', owner_contributions$Amount)
+owner_contributions
+```
+
+```{r}
+
+#now I can use mutate_at function to change data type at specific column 'Amount'
+
+owner_contributions <- owner_contributions %>%
+    mutate_at(c('Amount'), as.numeric)
+owner_contributions
+```
+
+Data is now ready for analysis. Going through all the questions in R now.
+
+QUERY 1: Looking at donations by league
+
+Already knowing from Python analysis we have a lot of owners that own more than 1 team. I'm going to create a tibble that shows me distribution of owners with only one team. 2,334 out of the 2,798 donations were made be an owner who only owns one team, that is an 84% share of all donations made, more than enough for an acceptable sample size
+
+```{r}
+
+#checking size of population for owners that only own one team 
+single_owner_count <- filter(owner_contributions, nchar(League) <= 6) %>%
+    count()
+single_owner_count
+
+```
+
+```{r}
+
+# creating breakdown of donations by league based off single team owners
+league_breakdown <- owner_contributions %>%
+    filter(nchar(League) <= 6) %>%
+    group_by(League) %>%
+    summarise(TotalAmount = sum(Amount), AvgDonation = mean(Amount)) %>%
+    mutate('% of Total Donations' = TotalAmount/sum(TotalAmount)) %>%
+    arrange(desc(TotalAmount))
+
+View(league_breakdown)
+
+#write.csv(league_breakdown, 'donation_by_league.csv')
+```
+
+QUERY 2: Examining donation totals between two major political parties
+
+```{r}
+
+party_breakdown <- owner_contributions %>%
+    group_by(Party) %>%
+    summarise('TotalAmount' = sum(Amount)) %>%
+    mutate('% of Total' = TotalAmount/sum(TotalAmount)) %>%
+    arrange(desc(TotalAmount))
+
+View(party_breakdown)
+```
+
+```{r}
+# little query to check what the donations whose party were listed as N/A were, just some PACS mostly
+empty_party <- owner_contributions %>%
+    filter(Party == 'N/A')
+
+View(empty_party)
+```
+
+QUERY 3: Looking at the top owners and their donation amount. Going to add a donation count column as well to see that info next to their \$ amount
+
+```{r}
+
+top_donators <- owner_contributions %>%
+    group_by(Owner, Team) %>%
+    summarise(DollarAmount = sum(Amount), AvgDonation = mean(Amount), 'Donation Count' = n()) %>%
+    arrange(desc(DollarAmount))
+
+View(top_donators)
+
+#write.csv(top_donators, 'top_political_contributors.csv')
+
+# I like that better than the query I did for Python 
+```
+
+QUERY 4: Looking at who top recipients were for donations in total and then zeroing in on PACS as well
+
+I think I may be able to do this more efficiently in R (ie. less code)
+
+```{r}
+PAC_breakdown <- owner_contributions %>%
+    filter(grepl('PAC', Recipient) | grepl('Political Action', Recipient, ignore.case = TRUE)) %>%
+    group_by(Recipient) %>%
+    summarise('DollarAmount' = sum(Amount), '# of Donations' = n()) %>%
+    arrange(desc(DollarAmount))
+
+#View(PAC_breakdown)
+
+# much less code than in Python, also for sake of not being clutterful since I have both fields that I want to sort by, I'm not going to create a separate dataframe thats sorted by count. I'm able to do that in arrange statement and then export whatever version i want to work with in .csv
+
+# next will do the same but for all recipients 
+recipient_breakdown <- owner_contributions %>%
+    group_by(Recipient) %>%
+    summarise('DollarAmount' = sum(Amount), '# of Donations' = n(), AvgDonation = mean(Amount)) %>%
+    arrange(desc(DollarAmount))
+
+View(recipient_breakdown)
+
+#write.csv(recipient_breakdown, 'top_recipients.csv')
+
+```
+
+QUERY 5: Looking to see if there is a constant amount of contribution to in accordance with limits set by FEC
+
+```{r}
+top_donation_amount <- owner_contributions %>%
+    group_by(Amount) %>%
+    summarise(DonationCount = n(), AvgYear = mean(`Election Year`)) %>%
+    arrange(desc(DonationCount))
+
+View(top_donation_amount)
+#write.csv(top_donation_amount, 'freq_amounts.csv')
+```
+
+QUERY 6: Looking at contribution amounts through the years
+
+```{r}
+contributions_by_year <- owner_contributions %>%
+    group_by(`Election Year`) %>%
+    summarise('TotalAmount' = sum(Amount), 'DonationCount' = n()) %>%
+    arrange(desc(TotalAmount))
+
+View(contributions_by_year)
+
+#write.csv(contributions_by_year, 'bi_annual_glance.csv')
+```
